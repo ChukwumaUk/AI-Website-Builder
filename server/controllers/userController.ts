@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 import prisma from "../lib/prisma.js";
 import openai from "../configs/openai.js";
-import Stripe from "stripe";
+import axios from "axios";
+import { paystack } from '../lib/paystack.js'
+
 
 // Get User Credits
 export const getUserCredits = async (req: Request, res: Response) => {
@@ -304,71 +306,73 @@ export const togglePublish = async (req: Request, res: Response) => {
 }
 
 // Controller Function to Purchase Credits
+
 export const purchaseCredits = async (req: Request, res: Response) => {
-   try {
-    interface Plan {
-        credits: number;
-        amount: number;
+
+    console.log("req.userId:", req.userId);
+    console.log("req.user:", req.user);
+
+  try {
+    // 1️⃣ AUTH & REQUIRED DATA GUARDS (ADD IT HERE 👇)
+    if (!req.userId) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
+    if (!req.user?.email) {
+      return res.status(400).json({ message: "User email missing" });
+    }
+
+    // 2️⃣ DEFINE PLANS
     const plans = {
-        basic: {credits: 100, amount: 5},
-        pro: {credits: 400, amount: 19},
-        enterprise: {credits: 1000, amount: 49},
-    }
+      basic: { credits: 100, amount: 7500 },
+      pro: { credits: 400, amount: 28500 },
+      enterprise: { credits: 1000, amount: 73500 },
+    };
 
-    const userId = req.userId;
-    const {planId} = req.body as {planId: keyof typeof plans}
+    // 3️⃣ READ INPUT
+    const { planId } = req.body;
     const origin = req.headers.origin as string;
 
-
-    const plan: Plan = plans[planId]
-
-    if(!plan) {
-        return res.status(404).json({ message: 'Plan not found' });
+    if (!origin) {
+        return res.status(400).json({ message: "Invalid request origin" });
     }
 
+    const plan = plans[planId as keyof typeof plans];
+    if (!plan) {
+      return res.status(404).json({ message: "Plan not found" });
+    }
+
+    // 4️⃣ CREATE TRANSACTION
     const transaction = await prisma.transaction.create({
-        data: {
-            userId: userId!,
-            planId: req.body.planId,
-            amount: plan.amount,
-            credits: plan.credits
-        }
-    })
+      data: {
+        userId: req.userId,
+        planId,
+        amount: plan.amount,
+        credits: plan.credits,
+      },
+    });
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY  as string);
-
-    const session = await stripe.checkout.sessions.create({
-        success_url: `${origin}/loading`,
-        cancel_url: `${origin}`,
-        line_items: [
-            {
-            price_data: {
-                currency: 'usd',
-                product_data: {
-                    name: `AiSiteBuilder - ${plan.credits} credits`
-                },
-
-                unit_amount: Math.floor(transaction.amount) * 100
-            },
-            quantity: 1
-            },
-        ],
-        mode: 'payment',
+    // 5️⃣ INITIALIZE PAYSTACK
+    const paystackResponse = await paystack.transaction.initialize({
+        email: req.user.email,
+        amount: plan.amount * 100, // kobo
+        callback_url: `${origin}/loading`,
         metadata: {
             transactionId: transaction.id,
-            appId: 'ai-site-builder'
+            appId: "ai-site-builder",
         },
-        expires_at: Math.floor(Date.now() / 1000) + 30 * 60, //Expires in 30 minutes
-        });
+    });
 
-    res.json({payment_link: session.url});
+    // 6️⃣ RETURN PAYMENT LINK
+    res.json({
+        payment_link: paystackResponse.data.authorization_url,
+    });
 
 
-   } catch (error: any) {
-    console.log(error.code || error.message);
-    res.status(500).json({ message: error.message });
-   }
-}
+  } catch (error: any) {
+    console.log(error.response?.data || error.message);
+    res.status(500).json({ message: "Payment initialization failed" });
+  }
+};
+
 
