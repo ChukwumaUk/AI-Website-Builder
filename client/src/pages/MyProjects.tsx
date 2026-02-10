@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Project } from '../types';
 import { Loader2Icon, PlusIcon, TrashIcon } from 'lucide-react';
-import { isSession, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import Footer from '../components/Footer';
 import api from '@/configs/axios';
 import { toast } from 'sonner';
@@ -85,7 +85,7 @@ const MyProjects = () => {
                                     {project.current_code ? (
                                         <iframe 
                                         srcDoc={project.current_code}
-                                        className='absolute top-0 left-0 w-[1200px] h-[800px] origin-top-left pointer-events-none'
+                                        className='absolute top-0 left-0 w-300 h-200 origin-top-left pointer-events-none'
                                         sandbox='allow-scripts allow-same-origin'
                                         style={{transform: 'scale(0.25)'}}
                                         />
