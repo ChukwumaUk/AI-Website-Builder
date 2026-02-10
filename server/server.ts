@@ -11,9 +11,13 @@ const app = express();
 const port = 3000;
 
 const corsOptions = {
-  origin: process.env.TRUSTED_ORIGINS?.split(',') || [],
+  origin: [
+    ...(process.env.TRUSTED_ORIGINS?.split(',') || []), 
+    "https://ai-website-builder-omega-indol.vercel.app" 
+  ],
   credentials: true,
 };
+
 
 app.use(cors(corsOptions));
 
